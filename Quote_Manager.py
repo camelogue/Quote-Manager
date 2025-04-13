@@ -13,15 +13,11 @@ quote_index = -1
 quote_id_list = -1
 
 def close_db():
-    # Veritabanı bağlantısını kapat
     conn.close()
-    print("Veritabanı bağlantısı kapatıldı.")
-
 
 def on_window_close():
     close_db()
     window.destroy()
-
 
 def connect_db():
     return sqlite3.connect(db_path)
@@ -60,9 +56,7 @@ def create_table():
     cursor.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('books', 100);")
     cursor.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('quotes', 100);")
     
-    
     conn.commit()
-    
     
 def get_author_names(clean=True):
     global gl_author_id
@@ -79,10 +73,8 @@ def get_author_names(clean=True):
     if clean:
         author_name_combobox.set("Select an author")
         gl_author_id = 0
-        print(f"author_id: {gl_author_id}")
         book_name_combobox.set("")
         gl_book_id = 0
-        print(f"book_id: {gl_book_id}")
         quote_id_combobox.set("")
         quote_content_text["state"] = "normal"
         quote_content_text.delete(1.0, tk.END)
@@ -91,7 +83,6 @@ def get_author_names(clean=True):
 def edit_author():
     global gl_author_id
     author_id = gl_author_id
-    print(f"author_id: {gl_author_id}")
     
     if not author_id:
         return
@@ -136,9 +127,7 @@ def edit_author():
     
     edit_author_window.mainloop()  
 
-
 def create_new_author():
-    
     def cna_submit():
         global gl_author_id
         
@@ -152,7 +141,6 @@ def create_new_author():
         author_id = cursor.fetchone()
         author_id = author_id[0]
         gl_author_id = author_id
-        print(f"author_id: {gl_author_id}")
         get_book_titles()
         add_author_window.destroy()
     
@@ -188,7 +176,6 @@ def delete_author():
     global gl_author_id
     selected_author = author_name_combobox.get()
     author_id = gl_author_id
-    print(f"author_id: {gl_author_id}")
     confirm = messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete '{selected_author}'?")
     
     if confirm:
@@ -209,30 +196,21 @@ def get_book_titles(event=None, clean=True):
         return
     
     cursor = conn.cursor()
-    
-    
     cursor.execute("SELECT author_id FROM authors WHERE name = ?", (selected_author,))
     author_id = cursor.fetchone()
     
     author_id = author_id[0]
     gl_author_id = author_id
-    print(f"author_id: {gl_author_id}")
-    # Bu yazara ait kitapları çek
     cursor.execute("SELECT title FROM books WHERE author_id = ?", (author_id,))
     books = cursor.fetchall()
     cursor.close()
-    # Kitap isimlerini liste olarak al
     book_list = [book[0] for book in books]
-        
     book_list.sort()
-        
-    # Kitap seçim kutusuna ekle
     book_name_combobox['values'] = book_list
     
     if clean:
         book_name_combobox.set("Select a book")
         gl_book_id = 0
-        print(f"book_id: {gl_book_id}")
         quote_id_combobox.set('')
         quote_content_text["state"] = "normal"
         quote_content_text.delete(1.0, tk.END)
@@ -250,15 +228,12 @@ def get_book_titles(event=None, clean=True):
 def edit_book():
     global gl_author_id
     global gl_book_id
-    
+
     author_id = gl_author_id
-    print(f"author_id: {gl_author_id}")
     book_id = gl_book_id
-    print(f"book_id: {gl_book_id}")
     
     def eb_submit():
         title = eb_book_title_entry.get()
-        
         cursor = conn.cursor()
         cursor.execute("UPDATE books SET title = ? WHERE author_id = ? AND book_id = ?", (title, author_id, book_id))
         conn.commit()
@@ -297,16 +272,13 @@ def edit_book():
 
 
 def create_new_book():
-    
     def cnb_submit():
         global gl_author_id
         global gl_book_id
         
         author_id = gl_author_id
-        print(f"author_id: {gl_author_id}")
         name = cnb_book_name_entry.get().strip()
         if not name:
-            print("Book name cannot be empty!")
             return
         cursor = conn.cursor()
         
@@ -314,11 +286,10 @@ def create_new_book():
         max_book_id = cursor.fetchone()[0]
         
         if max_book_id is None:
-            new_book_id = 101  # İlk kitap ekleniyorsa 101 ile başlat
+            new_book_id = 101
         else:
-            new_book_id = max_book_id + 1  # Aksi halde en büyük olanın bir fazlasını al
+            new_book_id = max_book_id + 1
             
-        print(author_id)
         cursor.execute("INSERT INTO books (author_id, book_id, title) VALUES (?, ?, ?)", (author_id, new_book_id, name))
         conn.commit()
         get_book_titles()
@@ -327,7 +298,6 @@ def create_new_book():
         book_id = cursor.fetchone()
         book_id = book_id[0]
         gl_book_id = book_id
-        print(f"book_id: {gl_book_id}")
         get_quote_ids()
         add_book_window.destroy()
     
@@ -365,9 +335,7 @@ def delete_book():
     
     selected_book = book_name_combobox.get()
     author_id = gl_author_id
-    print(f"author_id: {gl_author_id}")
     book_id = gl_book_id
-    print(f"book_id: {gl_book_id}")
     confirm = messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete '{selected_book}'?")
     
     if confirm:
@@ -389,28 +357,21 @@ def get_quote_ids(event=None, clean=True):
         return
     
     cursor = conn.cursor()
-    
-    
     cursor.execute("SELECT book_id FROM books WHERE author_id = ? AND title = ?", (author_id, selected_book,))
     book_id = cursor.fetchone()
     
     book_id = book_id[0]
     gl_book_id = book_id
-    print(f"book_id: {gl_book_id}")
-    # Bu yazara ait kitapları çek
     cursor.execute("SELECT quote_id, page FROM quotes WHERE author_id = ? AND book_id = ?", (author_id, book_id,))
     quotes_pages = cursor.fetchall()
     cursor.close()
-    # Kitap isimlerini liste olarak al
     quote_id_list = [quote_page[0] for quote_page in quotes_pages]
     page_list = [quote_page[1] for quote_page in quotes_pages]
     merge_list =[]
     
     for i, quote_id in enumerate(quote_id_list):
         merge_list.append(f"{gl_author_id}{gl_book_id}{quote_id} at page {page_list[i]}")
-        
-        
-    # Kitap seçim kutusuna ekle
+
     quote_id_combobox['values'] = merge_list
     
     if clean:
@@ -431,9 +392,7 @@ def edit_quote():
     global gl_quote_id
     
     author_id = gl_author_id
-    print(f"author_id: {gl_author_id}")
     book_id = gl_book_id
-    print(f"book_id: {gl_book_id}")
     quote_id = gl_quote_id
     
     def eq_submit():
@@ -442,7 +401,6 @@ def edit_quote():
         quote = eq_content_text.get(1.0, "end-1c").strip()
         
         if not quote:
-            print("Quote cannot be empty!")
             return
         
         cursor = conn.cursor()
@@ -450,7 +408,6 @@ def edit_quote():
         conn.commit()
         quote_id_combobox.set(f"{gl_author_id}{gl_book_id}{quote_id} at page {page}")
         prev_quote_index = quote_index
-        print(prev_quote_index)
         get_quote_info(passed_quote_index=prev_quote_index)
         get_quote_ids(clean=False)
         edit_quote_window.destroy()
@@ -500,35 +457,29 @@ def edit_quote():
     edit_quote_window.mainloop()
     
 def create_new_quote():
-    
     def cnq_submit():
         global gl_author_id
         global gl_book_id
         global gl_quote_id
         
         author_id = gl_author_id
-        print(f"author_id: {gl_author_id}")
         book_id = gl_book_id
-        print(f"book_id: {gl_book_id}")
         page = cnq_quote_page_entry.get().strip()
         quote = cnq_content_text.get(1.0, "end-1c").strip()
         
         if not quote:
-            print("Quote cannot be empty!")
             return
         
         cursor = conn.cursor()
-        
         cursor.execute("SELECT MAX(quote_id) FROM quotes WHERE author_id = ? AND book_id = ?", (author_id, book_id,))
         max_quote_id = cursor.fetchone()[0]
         
         if max_quote_id is None:
-            new_quote_id = 101  # İlk alıntı ekleniyorsa 101 ile başlat
+            new_quote_id = 101
         else:
-            new_quote_id = max_quote_id + 1  # Aksi halde en büyük olanın bir fazlasını al
+            new_quote_id = max_quote_id + 1
 
         gl_quote_id = max_quote_id
-        print(f"quote_id: {new_quote_id}")
         cursor.execute("INSERT INTO quotes (author_id, book_id, quote_id, page, content) VALUES (?, ?, ?, ?, ?)", (author_id, book_id, new_quote_id, page, quote))
         conn.commit()
         get_quote_ids()
@@ -584,9 +535,7 @@ def delete_quote():
     
     quote_id = gl_quote_id
     author_id = gl_author_id
-    print(f"author_id: {gl_author_id}")
     book_id = gl_book_id
-    print(f"book_id: {gl_book_id}")
     confirm = messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete the quote (ID: {gl_author_id}{gl_book_id}{quote_id})?")
     
     if confirm:
@@ -604,16 +553,13 @@ def get_quote_info(event=None, passed_quote_index=-1):
     global quote_id_list
     
     author_id = gl_author_id
-    print(f"author_id: {gl_author_id}")
     book_id = gl_book_id
-    print(f"book_id: {gl_book_id}")
     
     if passed_quote_index == -1:
         quote_index = quote_id_combobox.current()
     else:
         quote_index = passed_quote_index
         
-    print(quote_index)
     selected_quote_id = quote_id_list[quote_index]
     gl_quote_id = selected_quote_id
     
@@ -621,7 +567,6 @@ def get_quote_info(event=None, passed_quote_index=-1):
         return
     
     cursor = conn.cursor()
-    
     cursor.execute("SELECT page, content FROM quotes WHERE author_id = ? AND book_id = ? AND quote_id = ?", (author_id, book_id, selected_quote_id,))
     quote_info = cursor.fetchone()
     
@@ -675,7 +620,6 @@ author_frame_entry_frame_container = tk.Frame(
     author_frame_entry_frame
     )
 author_frame_entry_frame_container.pack()
-
 
 author_name_label = tk.Label(
     author_frame_entry_frame_container,
@@ -895,7 +839,6 @@ version_label = tk.Label(
     )
 version_label.pack(side='bottom', padx=5, pady=3, fill='x')
 
-
 db_file = 'quotes.db'
     
 if getattr(sys, 'frozen', False):
@@ -903,9 +846,7 @@ if getattr(sys, 'frozen', False):
 else:
     app_path = os.path.dirname(os.path.abspath(__file__))
 
-
 db_path = os.path.join(app_path, 'quotes.db')
-
 
 if not os.path.exists(db_path):
     conn = connect_db()
@@ -913,14 +854,10 @@ if not os.path.exists(db_path):
 else:
     conn = sqlite3.connect(db_path)
 
-
 create_table()
-
 get_author_names()
 
-
 window.protocol("WM_DELETE_WINDOW", on_window_close)
-
 
 window.mainloop()
 
