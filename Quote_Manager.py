@@ -45,7 +45,9 @@ def create_table():
         book_id INTEGER,
         quote_id INTEGER,
         page TEXT NOT NULL,
+        parent_quote_id INTEGER,
         content TEXT NOT NULL,
+        notes TEXT,
         PRIMARY KEY (author_id, book_id, quote_id),
         FOREIGN KEY (author_id) REFERENCES authors(author_id),
         FOREIGN KEY (author_id, book_id) REFERENCES books(author_id, book_id)
@@ -394,6 +396,24 @@ def edit_quote():
     author_id = gl_author_id
     book_id = gl_book_id
     quote_id = gl_quote_id
+
+    cursor = conn.cursor()
+    cursor.execute("SELECT page, content, parent_quote_id, notes FROM quotes WHERE author_id = ? AND book_id = ? AND quote_id = ?", 
+               (author_id, book_id, quote_id))
+    quote_info = cursor.fetchone()
+
+    page, content, parent_id, notes = quote_info
+
+    cursor.execute("SELECT quote_id, page FROM quotes WHERE author_id = ? AND book_id = ?", (author_id, book_id,))
+    parent_quotes = cursor.fetchall()
+
+    parent_quote_ids = [qid for qid, pg in parent_quotes]
+    parent_quote_display = [f"{author_id}{book_id}{qid} at page {pg}" for qid, pg in parent_quotes]
+    
+
+    if parent_id is not None and parent_id in parent_quote_ids:
+        idx = parent_quote_ids.index(parent_id)
+
     
     def eq_submit():
         global quote_index
@@ -403,8 +423,21 @@ def edit_quote():
         if not quote:
             return
         
+        parent_quote_index = eq_parent_quote_combobox.current()
+        if parent_quote_index != -1:
+            selected_parent_id = parent_quote_ids[parent_quote_index]
+            if selected_parent_id == quote_id:
+                messagebox.showerror("Invalid Parent", "A quote cannot be its own parent.", parent=edit_quote_window)
+                return
+            parent_quote_id = selected_parent_id
+        else:
+            parent_quote_id = None
+
+
+        notes = cnq_notes_text.get("1.0", "end-1c").strip()
+        
         cursor = conn.cursor()
-        cursor.execute("UPDATE quotes SET page = ?, content = ? WHERE author_id = ? AND book_id = ? AND quote_id = ?", (page, quote, author_id, book_id, quote_id,))
+        cursor.execute("UPDATE quotes SET page = ?, content = ?, parent_quote_id = ?, notes = ? WHERE author_id = ? AND book_id = ? AND quote_id = ?", (page, quote, parent_quote_id, notes, author_id, book_id, quote_id))
         conn.commit()
         quote_id_combobox.set(f"{gl_author_id}{gl_book_id}{quote_id} at page {page}")
         prev_quote_index = quote_index
@@ -415,29 +448,48 @@ def edit_quote():
     
     edit_quote_window = tk.Toplevel(window)
     edit_quote_window.title("Edit Quote")
-    edit_quote_window.geometry("700x450")
+    edit_quote_window.geometry("700x600")
     
     eq_quote_info_frame = tk.Frame(
         edit_quote_window
         )
     eq_quote_info_frame.pack(side=tk.TOP, pady=10)
-    
-    eq_quote_page_label = tk.Label(
-        eq_quote_info_frame,
-        text="Page Number")
-    eq_quote_page_label.pack(side=tk.TOP)
-    
-    eq_quote_page_entry = tk.Entry(
+
+    eq_quote_info_upper_frame = tk.Frame(
         eq_quote_info_frame
         )
-    eq_quote_page_entry.pack(side=tk.TOP, pady=10)
+    eq_quote_info_upper_frame.pack()
+    
+    eq_quote_page_label = tk.Label(
+        eq_quote_info_upper_frame,
+        text="Page Number")
+    eq_quote_page_label.grid(row=0, column=0)
+    
+    eq_quote_page_entry = tk.Entry(
+        eq_quote_info_upper_frame
+        )
+    eq_quote_page_entry.grid(row=1, column=0, padx=20)
     eq_quote_page_entry.insert(0, gl_page)
+
+    eq_parent_quote_label = tk.Label(
+        eq_quote_info_upper_frame,
+        text="Parent Quote"
+    )
+    eq_parent_quote_label.grid(row=0, column=1)
+
+    eq_parent_quote_combobox = ttk.Combobox(
+        eq_quote_info_upper_frame,
+        state="readonly"
+        )
+    eq_parent_quote_combobox.grid(row=1, column=1, padx=20)
+    eq_parent_quote_combobox['values'] = parent_quote_display
+    eq_parent_quote_combobox.current(idx)
     
     eq_content_label = tk.Label(
         eq_quote_info_frame,
         text="Content"
         )
-    eq_content_label.pack(side=tk.TOP, pady=5)
+    eq_content_label.pack(side=tk.TOP, pady=(20, 0))
 
     eq_content_text = tk.Text(
         eq_quote_info_frame,
@@ -446,6 +498,20 @@ def edit_quote():
         )
     eq_content_text.pack(side=tk.TOP, pady=5)
     eq_content_text.insert('1.0', quote_content_text.get(1.0, "end-1c"))
+
+    cnq_notes_label = tk.Label(
+        eq_quote_info_frame,
+        text="Notes"
+        )
+    cnq_notes_label.pack(side=tk.TOP, pady=(20, 0))
+
+    cnq_notes_text = tk.Text(
+        eq_quote_info_frame,
+        height=9,
+        wrap=tk.WORD
+        )
+    cnq_notes_text.pack(side=tk.TOP, pady=5)
+    cnq_notes_text.insert("1.0", notes if notes else "")
     
     eq_submit_button = tk.Button(
         eq_quote_info_frame,
@@ -457,6 +523,19 @@ def edit_quote():
     edit_quote_window.mainloop()
     
 def create_new_quote():
+    global gl_author_id
+    global gl_book_id
+
+    author_id = gl_author_id
+    book_id = gl_book_id
+
+    cursor = conn.cursor()
+    cursor.execute("SELECT quote_id, page FROM quotes WHERE author_id = ? AND book_id = ?", (author_id, book_id,))
+    parent_quotes = cursor.fetchall()
+
+    parent_quote_ids = [qid for qid, pg in parent_quotes]
+    parent_quote_list = [f"{author_id}{book_id}{qid} at page {pg}" for qid, pg in parent_quotes]
+
     def cnq_submit():
         global gl_author_id
         global gl_book_id
@@ -479,38 +558,65 @@ def create_new_quote():
         else:
             new_quote_id = max_quote_id + 1
 
-        gl_quote_id = max_quote_id
-        cursor.execute("INSERT INTO quotes (author_id, book_id, quote_id, page, content) VALUES (?, ?, ?, ?, ?)", (author_id, book_id, new_quote_id, page, quote))
+        gl_quote_id = new_quote_id
+
+        parent_quote_index = cnq_parent_quote_combobox.current()
+        if parent_quote_index != -1:
+            parent_quote_id = parent_quote_ids[parent_quote_index]
+        else:
+            parent_quote_id = None
+
+        notes = cnq_notes_text.get("1.0", "end-1c").strip()
+
+        cursor.execute("INSERT INTO quotes (author_id, book_id, quote_id, page, parent_quote_id, content, notes) VALUES (?, ?, ?, ?, ?, ?, ?)", (author_id, book_id, new_quote_id, page, parent_quote_id, quote, notes))
         conn.commit()
         get_quote_ids()
         quote_id_combobox.set(f"{gl_author_id}{gl_book_id}{new_quote_id} at page {page}")
         get_quote_info()
         add_quote_window.destroy()
-    
+
     add_quote_window = tk.Toplevel(window)
     add_quote_window.title("Add Quote")
-    add_quote_window.geometry("700x450")
+    add_quote_window.geometry("700x600")
     
     cnq_quote_info_frame = tk.Frame(
         add_quote_window
         )
     cnq_quote_info_frame.pack(side=tk.TOP, pady=10)
-    
-    cnq_quote_page_label = tk.Label(
-        cnq_quote_info_frame,
-        text="Enter Page Number")
-    cnq_quote_page_label.pack(side=tk.TOP)
-    
-    cnq_quote_page_entry = tk.Entry(
+
+    cnq_quote_info_upper_frame = tk.Frame(
         cnq_quote_info_frame
         )
-    cnq_quote_page_entry.pack(side=tk.TOP, pady=10)
+    cnq_quote_info_upper_frame.pack()
+    
+    cnq_quote_page_label = tk.Label(
+        cnq_quote_info_upper_frame,
+        text="Enter Page Number")
+    cnq_quote_page_label.grid(row=0, column=0)
+    
+    cnq_quote_page_entry = tk.Entry(
+        cnq_quote_info_upper_frame
+        )
+    cnq_quote_page_entry.grid(row=1, column=0, padx=20)
+
+    cnq_parent_quote_label = tk.Label(
+        cnq_quote_info_upper_frame,
+        text="Parent Quote"
+        )
+    cnq_parent_quote_label.grid(row=0, column=1)
+
+    cnq_parent_quote_combobox = ttk.Combobox(
+        cnq_quote_info_upper_frame,
+        state="readonly"
+        )
+    cnq_parent_quote_combobox.grid(row=1, column=1, padx=20)
+    cnq_parent_quote_combobox['values'] = parent_quote_list
     
     cnq_content_label = tk.Label(
         cnq_quote_info_frame,
         text="Content"
         )
-    cnq_content_label.pack(side=tk.TOP, pady=5)
+    cnq_content_label.pack(side=tk.TOP, pady=(20, 0))
 
     cnq_content_text = tk.Text(
         cnq_quote_info_frame,
@@ -518,7 +624,20 @@ def create_new_quote():
         wrap=tk.WORD
         )
     cnq_content_text.pack(side=tk.TOP, pady=5)
-    
+
+    cnq_notes_label = tk.Label(
+        cnq_quote_info_frame,
+        text="Notes"
+        )
+    cnq_notes_label.pack(side=tk.TOP, pady=(20, 0))
+
+    cnq_notes_text = tk.Text(
+        cnq_quote_info_frame,
+        height=9,
+        wrap=tk.WORD
+        )
+    cnq_notes_text.pack(side=tk.TOP, pady=5)
+
     cnq_submit_button = tk.Button(
         cnq_quote_info_frame,
         text="Submit",
@@ -567,8 +686,28 @@ def get_quote_info(event=None, passed_quote_index=-1):
         return
     
     cursor = conn.cursor()
-    cursor.execute("SELECT page, content FROM quotes WHERE author_id = ? AND book_id = ? AND quote_id = ?", (author_id, book_id, selected_quote_id,))
+    cursor.execute("SELECT page, content, parent_quote_id, notes FROM quotes WHERE author_id = ? AND book_id = ? AND quote_id = ?", (author_id, book_id, selected_quote_id,))
     quote_info = cursor.fetchone()
+
+    parent_id = quote_info[2]
+    notes = quote_info[3]
+
+    if parent_id:
+        cursor.execute("SELECT page FROM quotes WHERE author_id = ? AND book_id = ? AND quote_id = ?", 
+                    (author_id, book_id, parent_id))
+        parent_page = cursor.fetchone()
+        if parent_page:
+            quote_parent_id_entry.delete(0, tk.END)
+            quote_parent_id_entry.insert(0, f"{author_id}{book_id}{parent_id} at page {parent_page[0]}")
+    else:
+        quote_parent_id_entry.delete(0, tk.END)
+
+    quote_notes_text["state"] = "normal"
+    quote_notes_text.delete(1.0, tk.END)
+    if notes:
+        quote_notes_text.insert("1.0", notes)
+    quote_notes_text["state"] = "disable"
+
     
     if quote_info[0] and quote_info[1]:
         gl_page = quote_info[0]
@@ -584,7 +723,7 @@ window = tk.Tk()
 
 window.title("Quote Manager")
 
-window.geometry("1200x700")
+window.geometry("1200x800")
 
 entry_frame = tk.Frame(
     window
@@ -781,13 +920,24 @@ quote_id_combobox = ttk.Combobox(
 quote_id_combobox.grid(row=1, column=0, padx=20)
 quote_id_combobox.bind("<<ComboboxSelected>>", get_quote_info)
 
+quote_parent_id_label = tk.Label(
+    quote_frame_entry_frame_container,
+    text="Parent Quote"
+)
+quote_parent_id_label.grid(row=0, column=1)
+
+quote_parent_id_entry = tk.Entry(
+    quote_frame_entry_frame_container
+)
+quote_parent_id_entry.grid(row=1, column=1, padx=20)
+
 edit_quote_button = tk.Button(
     quote_frame_entry_frame_container,
     text="Edit",
     command=edit_quote,
     state="disable"
     )
-edit_quote_button.grid(row=1, column=1, padx=10)
+edit_quote_button.grid(row=1, column=2, padx=10)
 
 new_quote_button = tk.Button(
     quote_frame_entry_frame_container,
@@ -795,7 +945,7 @@ new_quote_button = tk.Button(
     command=create_new_quote,
     state="disable"
     )
-new_quote_button.grid(row=1, column=2, padx=10)
+new_quote_button.grid(row=1, column=3, padx=10)
 
 delete_quote_button = tk.Button(
     quote_frame_entry_frame_container,
@@ -803,7 +953,7 @@ delete_quote_button = tk.Button(
     command=delete_quote,
     state="disable"
     )
-delete_quote_button.grid(row=1, column=3, padx=10)
+delete_quote_button.grid(row=1, column=4, padx=10)
 
 quote_content_container = tk.Frame(
     quote_frame_entry_frame
@@ -824,6 +974,25 @@ quote_content_text = tk.Text(
     )
 quote_content_text.grid(row=1, column=0)
 
+quote_notes_container = tk.Frame(
+    quote_frame_entry_frame,
+    )
+quote_notes_container.pack()
+
+quote_notes_label = tk.Label(
+    quote_notes_container,
+    text="Notes"
+    )
+quote_notes_label.grid(row=0, column=0)
+
+quote_notes_text = tk.Text(
+    quote_notes_container,
+    height=9,
+    wrap=tk.WORD,
+    state="disable"
+    )
+quote_notes_text.grid(row=1, column=0)
+
 seperator3 = tk.Frame(
     entry_frame,
     bg="grey",
@@ -833,7 +1002,7 @@ seperator3.pack(side=tk.TOP, fill=tk.BOTH)
 
 version_label = tk.Label(
     window,
-    text="Developed by yzm. |  Version 1.1",
+    text="Developed by yzm. |  Version 1.2",
     font=("Arial", 8, "italic"),
     anchor='e'
     )
